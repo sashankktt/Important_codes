@@ -1,0 +1,61 @@
+import sys
+import logging
+import logging.config
+import base64
+import json
+import boto3
+from botocore.exceptions import ClientError
+from awsglue.utils import getResolvedOptions
+
+# Parse Arguments for Glue Job
+ARGS = getResolvedOptions(sys.argv, ['CRAWLER_NM','S3_PATH'])
+crawler_nm = ARGS['CRAWLER_NM']
+s3_path    = ARGS['S3_PATH']
+
+# Define Functions
+def load_log_config():
+    '''
+    Basic logger
+    :return: Log object
+    '''
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    return root
+LOGGER = load_log_config()
+
+
+# Main Execution
+def main():
+    
+    #GET IAM ROLE
+    IAM = boto3.client('iam')
+    IAM_RESPONSE = IAM.get_role(RoleName='s3_glue')
+    ROLE = IAM_RESPONSE.get('Role')
+    #IAM_ARN = ROLE['Arn']
+    IAM_ARN = "arn:aws:iam::534338678546:role/s3_glue"
+    
+    client = boto3.client('glue',region_name='us-east-1')
+    print("Glue is called now")
+    LOGGER.info("*** Starting crawler ***")
+    
+    #PASSING AND RETRIVING WORKFLOW PARAMETERS HERE
+    response = client.get_workflow(Name='test',IncludeGraph=False)
+    property = response['Workflow']['DefaultRunProperties']
+    databaseName_wf = property['DATABASE_NAME']
+    tableName_wf = property['TABLE_NAME']
+    LOGGER.info('DBNAME = %s TBLNAME = %s',databaseName_wf,tableName_wf)
+    
+    #CREATE CRAWLER TO CREATE REQUIRED METADATA IN CATALOG
+    response = client.create_crawler(
+    Name=crawler_nm,
+    Role=IAM_ARN,
+    DatabaseName=databaseName_wf,
+    Targets={'S3Targets': [{'Path': s3_path}]}
+    )
+    
+    #RUN CRAWLER TO GET REQUIRED METADATA IN CATALOG
+    run_crawler = client.start_crawler(Name=crawler_nm)
+    print("Crawler is triggered now")
+    
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,101 @@
+import sys
+import logging
+import logging.config
+import base64
+import json
+import boto3
+from botocore.exceptions import ClientError
+from awsglue.utils import getResolvedOptions
+
+# Parse Arguments for Glue Job
+#ARGS = getResolvedOptions(sys.argv, ['s3_inbound_bucket'])
+#S3_INBOUND_BUCKET = ARGS['s3_inbound_bucket']
+
+# Define Functions
+def load_log_config():
+    '''
+    Basic logger
+    :return: Log object
+    '''
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    return root
+
+LOGGER = load_log_config()
+
+# Main Execution
+def main():
+    client = boto3.client('glue',region_name='us-east-1')
+    
+    #PASSING AND RETRIVING WORKFLOW PARAMETERS HERE
+    response = client.get_workflow(Name='test',IncludeGraph=False)
+    property = response['Workflow']['DefaultRunProperties']
+    databaseName_wf = property['DATABASE_NAME']
+    tableName_wf = property['TABLE_NAME']
+    LOGGER.info('DBNAME = %s TBLNAME = %s',databaseName_wf,tableName_wf)
+    
+    ##GETTING TABLE VERSIONS
+    versions = client.get_table_versions(DatabaseName=databaseName_wf,TableName=tableName_wf)
+    versions_list = versions['TableVersions']
+    
+    empty_lst=[]
+    for i in range(0,len(versions_list)):
+        #print(i)
+        version_id=int(versions_list[i]['VersionId'])
+        #print(type(version_id))
+        empty_lst.append(version_id) 
+        
+        
+    #WRITTEN LOGIC FROM VERSION CHECK AND FINDING SCHEMA OF TABLE    
+    for j in empty_lst:
+        if j==max(empty_lst):
+            print("Checking j value inside if loop: ",j)
+            str_j=str(j) #Type casting casting j to str
+            response = client.get_table_version(DatabaseName=databaseName_wf,TableName=tableName_wf,VersionId=str_j)
+            table_description=response['TableVersion']['Table']
+            column_description=table_description['StorageDescriptor']['Columns']
+            #print("Column Description of Highest version",column_description)
+   
+            empty_col=[]
+            for c_name1 in column_description:
+                empty_col.append(c_name1['Name'])
+            #print(empty_col)
+            
+            empty_type=[]
+            for type_col1 in column_description:
+                   empty_type.append(type_col1['Type'])
+            #print(empty_type)       
+            
+        elif j==(max(empty_lst)-1):
+            print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
+            print("Checking j value in elif",j)
+            str_j=str(j) #Type casting casting j to str
+            response = client.get_table_version(DatabaseName=databaseName_wf,TableName=tableName_wf,VersionId=str_j)
+            table_description=response['TableVersion']['Table']
+            column_description=table_description['StorageDescriptor']['Columns']
+            #break
+            #print("Column description of 2nd Heightest version",column_description)
+            
+            empty_col_2v=[]
+            for c_name1 in column_description:
+                empty_col_2v.append(c_name1['Name'])
+            #print("Column of (recent-1) version",empty_col_2v)
+            
+            
+            empty_type_2v=[]
+            for type_col1 in column_description:
+                empty_type_2v.append(type_col1['Type'])
+            #print("Data Type of (recent-1) version",empty_type_2v)
+            
+        else:
+            break
+   
+   
+    print("(Recent-1) version col names:  ",empty_col_2v)
+    print("Recent version col names:  ",empty_col)
+    
+    ####GETTING MISMATCHED COLUMN NAME
+    print("Mismatched Column is: ",set(empty_col) ^ set(empty_col_2v))
+   
+if __name__ == "__main__":
+    main()    
